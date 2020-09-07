@@ -36,15 +36,9 @@ void signal_handler(int signal){
   }
 }
 
-const json j_set_color = R"(
-{
-  "command_type": "set_color",
-  "command_arguments": { "red": 11, "green": 22, "blue": 33 }
-}
-)"_json;
-
 // TODO websocket async https://www.boost.org/doc/libs/develop/libs/beast/example/websocket/server/async/websocket_server_async.cpp
 
+/*
 void receive_commands(net::io_context& io_context, boost::lockfree::queue<cmd::Command>& cmd_queue){
   tcp::acceptor acceptor{io_context, {tcp::v4(), 8888}};
   tcp::socket socket{io_context};
@@ -60,6 +54,7 @@ void receive_commands(net::io_context& io_context, boost::lockfree::queue<cmd::C
     cmd_queue.push(cmd::SetBrightness{99});
   }
 }
+*/
 
 int main(){
   std::signal(SIGTERM, signal_handler);
@@ -78,7 +73,10 @@ int main(){
   });*/
   // TODO
   //https://www.boost.org/doc/libs/1_69_0/libs/beast/example/websocket/server/async/websocket_server_async.cpp
-  std::thread receive_task(receive_commands, std::ref(io_context), std::ref(cmd_queue));
+  //std::thread receive_task(receive_commands, std::ref(io_context), std::ref(cmd_queue));
+
+  std::make_shared<Listener>(io_context, tcp::endpoint{tcp::v4(), 8888})->run();
+  std::thread io_task([&io_context](){ io_context.run(); });
 
   while (not signaled) {
     const auto now = std::chrono::steady_clock::now();
@@ -88,8 +86,8 @@ int main(){
   }
 
   std::cout << "=== THE END ===\n";
-  //io_context.stop();
-  if (receive_task.joinable()) {
-    receive_task.join();
+  io_context.stop();
+  if (io_task.joinable()) {
+    io_task.join();
   }
 }

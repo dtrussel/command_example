@@ -68,6 +68,8 @@ public:
     std::cout << "DEBUG: read message: " << beast::make_printable(buffer_.data()) << std::endl;
     buffer_.consume(buffer_.size());
 
+    do_read();
+
     // Echo the message
     /*ws_.text(ws_.got_text());
     ws_.async_write(
