@@ -1,9 +1,10 @@
 #include "commands.hpp"
+#include "websocket.hpp"
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
 #include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/signal_set.hpp>
+#include <boost/lockfree/queue.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -20,11 +21,10 @@ namespace net = boost::asio;            // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
 
-void process_commands(cmd::CommandExecutor& executor, std::queue<cmd::Command>& cmd_queue, std::mutex& mtx){
-  while (not cmd_queue.empty()) {
-    const auto& command = cmd_queue.front();
+void process_commands(cmd::CommandExecutor& executor, boost::lockfree::queue<cmd::Command>& cmd_queue){
+  cmd::Command command;
+  while (cmd_queue.pop(command)) {
     std::visit(executor, command);
-    cmd_queue.pop();
   }
 }
 
@@ -45,7 +45,7 @@ const json j_set_color = R"(
 
 // TODO websocket async https://www.boost.org/doc/libs/develop/libs/beast/example/websocket/server/async/websocket_server_async.cpp
 
-void receive_commands(net::io_context& io_context, std::queue<cmd::Command>& cmd_queue, std::mutex& mtx){
+void receive_commands(net::io_context& io_context, boost::lockfree::queue<cmd::Command>& cmd_queue){
   tcp::acceptor acceptor{io_context, {tcp::v4(), 8888}};
   tcp::socket socket{io_context};
   acceptor.accept(socket); // blocks until connection is ready
@@ -54,7 +54,6 @@ void receive_commands(net::io_context& io_context, std::queue<cmd::Command>& cmd
   while (not signaled) {
     // TODO ws.read();
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    std::scoped_lock lock(mtx);
     //std::cout << j_set_color << std::endl;
     const auto command = cmd::deserialize(j_set_color);
     cmd_queue.push(command);
@@ -68,8 +67,7 @@ int main(){
 
   Lightbulb bulb("LED");
   cmd::CommandExecutor executor(bulb);
-  std::queue<cmd::Command> cmd_queue;
-  std::mutex mtx;
+  boost::lockfree::queue<cmd::Command> cmd_queue(100);
 
   net::io_context io_context(1);
   /*net::signal_set signals(io_context, SIGINT, SIGTERM);
@@ -79,12 +77,12 @@ int main(){
     io_context.stop();
   });*/
   // TODO
-  //https://www.boost.org/doc/libs/1_69_0/libs/beast/example/websocket/server/sync/websocket_server_sync.cpp
-  std::thread receive_task(receive_commands, std::ref(io_context), std::ref(cmd_queue), std::ref(mtx));
+  //https://www.boost.org/doc/libs/1_69_0/libs/beast/example/websocket/server/async/websocket_server_async.cpp
+  std::thread receive_task(receive_commands, std::ref(io_context), std::ref(cmd_queue));
 
   while (not signaled) {
     const auto now = std::chrono::steady_clock::now();
-    process_commands(executor, cmd_queue, mtx);
+    process_commands(executor, cmd_queue);
     // some other tasks...
     std::this_thread::sleep_until(now + std::chrono::milliseconds(500));
   }

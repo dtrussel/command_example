@@ -1,6 +1,6 @@
 [requires]
 nlohmann_json/3.9.1
-boost_beast/1.69.0@bincrafters/stable
+boost/1.70.0
 
 [generators]
 cmake
