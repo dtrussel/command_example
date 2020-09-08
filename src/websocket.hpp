@@ -25,10 +25,11 @@ void fail(beast::error_code ec, char const *what) {
 class Session : public std::enable_shared_from_this<Session> {
   websocket::stream<beast::tcp_stream> ws_;
   beast::flat_buffer buffer_;
+  cmd::CommandQueue& cmd_queue_;
 
 public:
   // Take ownership of the socket
-  explicit Session(tcp::socket &&socket) : ws_(std::move(socket)) {}
+  explicit Session(tcp::socket &&socket, cmd::CommandQueue& cmd_queue) : ws_(std::move(socket)), cmd_queue_(cmd_queue) {}
 
   // Start the asynchronous operation
   void run() {
@@ -65,8 +66,13 @@ public:
     if (ec)
       fail(ec, "read");
 
-    std::cout << "DEBUG: read message: " << beast::make_printable(buffer_.data()) << std::endl;
+    auto data = reinterpret_cast<char*>(buffer_.data().data());
+    const auto json_cmd = json::parse(data, data + buffer_.data().size());
     buffer_.consume(buffer_.size());
+    const auto command = cmd::deserialize(json_cmd);
+    cmd_queue_.push(command);
+
+    // TODO answer the client?
 
     do_read();
 
@@ -97,10 +103,11 @@ public:
 class Listener : public std::enable_shared_from_this<Listener> {
   net::io_context &ioc_;
   tcp::acceptor acceptor_;
+  cmd::CommandQueue& cmd_queue_;
 
 public:
-  Listener(net::io_context &ioc, tcp::endpoint endpoint)
-      : ioc_(ioc), acceptor_(ioc) {
+  Listener(net::io_context &ioc, tcp::endpoint endpoint, cmd::CommandQueue& cmd_queue)
+      : ioc_(ioc), acceptor_(ioc), cmd_queue_(cmd_queue) {
     beast::error_code ec;
 
     // Open the acceptor
@@ -148,7 +155,7 @@ private:
       fail(ec, "accept");
     } else {
       // Create the Session and run it
-      std::make_shared<Session>(std::move(socket))->run();
+      std::make_shared<Session>(std::move(socket), cmd_queue_)->run();
     }
 
     // Accept another connection

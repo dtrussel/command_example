@@ -1,5 +1,7 @@
 #pragma once
 
+#include <boost/lockfree/queue.hpp>
+
 #include <nlohmann/json.hpp>
 
 #include <iostream>
@@ -35,6 +37,7 @@ struct SetColor {
 };
 
 using Command = std::variant<SetBrightness, SetColor>;
+using CommandQueue = boost::lockfree::queue<cmd::Command>;
 
 struct CommandExecutor{
   CommandExecutor(Lightbulb& bulb) : bulb_(bulb){};
