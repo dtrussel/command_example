@@ -43,15 +43,6 @@ int main(){
   cmd::CommandQueue cmd_queue(100);
 
   net::io_context io_context(1);
-  /*net::signal_set signals(io_context, SIGINT, SIGTERM);
-  signals.async_wait([&](auto, auto){
-    std::cout << "Signal handler called" << std::endl;
-    signaled = true;
-    io_context.stop();
-  });*/
-  // TODO
-  //https://www.boost.org/doc/libs/1_69_0/libs/beast/example/websocket/server/async/websocket_server_async.cpp
-  //std::thread receive_task(receive_commands, std::ref(io_context), std::ref(cmd_queue));
 
   std::make_shared<Listener>(io_context, tcp::endpoint{tcp::v4(), 8888}, cmd_queue)->run();
   std::thread io_task([&io_context](){ io_context.run(); });
